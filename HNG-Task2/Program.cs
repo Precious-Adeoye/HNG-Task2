@@ -16,7 +16,7 @@ namespace HNG_Task2
               options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
 
-            
+
 
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
             builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
@@ -37,13 +37,14 @@ namespace HNG_Task2
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
-            if (app.Environment.IsDevelopment() || app.Environment.IsProduction() )
+            if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
+                app.UseHttpsRedirection();
             }
 
-            app.UseHttpsRedirection();
+           
 
             app.UseAuthorization();
 
