@@ -1,16 +1,16 @@
 # railway.toml
-[build]
-builder = "dockerfile"
-dockerfilePath = "./HNG-Task2/Dockerfile"
+# railway.toml
+
 [build]
 builder = "NIXPACKS"
 buildCommand = "dotnet publish -c Release -o out"
 
 [start]
-
+#  Use quotes and no forward slash in the key
 startCommand = "dotnet out/HNG_Task2.dll"
 
 [variables]
 ASPNETCORE_ENVIRONMENT = "Production"
 ASPNETCORE_URLS = "http://+:8080"
 PORT = "8080"
+
