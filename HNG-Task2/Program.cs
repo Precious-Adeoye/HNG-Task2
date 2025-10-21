@@ -39,7 +39,7 @@ namespace HNG_Task2
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
-                 app.UseHttpsRedirection();
+               //  app.UseHttpsRedirection();
             }
 
             using (var scope = app.Services.CreateScope())
