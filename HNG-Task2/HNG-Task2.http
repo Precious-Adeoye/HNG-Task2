@@ -1,0 +1,6 @@
+@HNG_Task2_HostAddress = http://localhost:5140
+
+GET {{HNG_Task2_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
