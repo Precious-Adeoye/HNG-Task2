@@ -16,6 +16,8 @@ namespace HNG_Task2
               options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
 
+            
+
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
             builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
@@ -51,6 +53,12 @@ namespace HNG_Task2
 
             // Log successful startup
             Console.WriteLine($"✅ Server running on port {port} in {app.Environment.EnvironmentName} mode");
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Database.EnsureCreated(); // Creates DB if not existing
+            }
 
 
             try
