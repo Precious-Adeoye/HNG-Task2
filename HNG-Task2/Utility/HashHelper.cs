@@ -3,13 +3,19 @@ using System.Text;
 
 namespace HNG_Task2.Utility
 {
-    public class HashHelper
+    public static class HashHelper
     {
         public static string ComputeSha256(string input)
         {
-            using var sha = SHA256.Create();
-            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
-            return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+            var builder = new StringBuilder();
+            foreach (var b in bytes)
+            {
+                builder.Append(b.ToString("x2"));
+            }
+            return builder.ToString();
         }
     }
 }

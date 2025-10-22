@@ -12,7 +12,7 @@ namespace HNG_Task2.Model
         public int UniqueCharacters { get; set; }
         public int WordCount { get; set; }
         public string Sha256Hash { get; set; } = string.Empty;
-        public string CharacterFrequencyJson { get; set; } = string.Empty;
+        public Dictionary<string, int> CharacterFrequencyMap { get; set; } = new();
         public DateTime CreatedAt { get; set; }
     }
 }

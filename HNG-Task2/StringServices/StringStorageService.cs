@@ -1,9 +1,10 @@
 ﻿using System.Text.Json;
+using HNG_Task2.IStringServices;
 using HNG_Task2.Model;
 using HNG_Task2.Utility;
-using HNG_Task2.IStringServices;
+using Microsoft.Extensions.Configuration;
 
-namespace HNG_Task2.StringServices
+namespace HNG_Task2.Services
 {
     public class StringStorageService : IStringStorage
     {
@@ -13,26 +14,37 @@ namespace HNG_Task2.StringServices
 
         public StringStorageService(IConfiguration configuration)
         {
-            // Get JsonFilePath from config or environment variable, fallback to platform-appropriate default
             _jsonFilePath = configuration.GetValue<string>("Storage:JsonFilePath")
-                ?? (Environment.OSVersion.Platform == PlatformID.Win32NT
+                ?? (OperatingSystem.IsWindows()
                     ? Path.Combine(Directory.GetCurrentDirectory(), "data", "strings.json")
                     : "/tmp/strings.json");
 
-            // Ensure parent directory exists
-            var directory = Path.GetDirectoryName(_jsonFilePath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            try
             {
-                Directory.CreateDirectory(directory);
+                var directory = Path.GetDirectoryName(_jsonFilePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                LoadFromJson();
             }
-
-            LoadFromJson();
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Warning: Failed to initialize JSON storage: {ex.Message}");
+            }
         }
 
         public async Task AddAsync(StringEntity entity)
         {
-            _inMemoryStore[entity.Id] = entity;
-            await SaveToJsonAsync();
+            try
+            {
+                _inMemoryStore[entity.Id] = entity;
+                await SaveToJsonAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Warning: Failed to add to storage: {ex.Message}");
+            }
         }
 
         public async Task<bool> ExistsAsync(string value)
@@ -66,9 +78,16 @@ namespace HNG_Task2.StringServices
 
         public async Task DeleteAsync(string value)
         {
-            string hash = HashHelper.ComputeSha256(value);
-            _inMemoryStore.Remove(hash);
-            await SaveToJsonAsync();
+            try
+            {
+                string hash = HashHelper.ComputeSha256(value);
+                _inMemoryStore.Remove(hash);
+                await SaveToJsonAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Warning: Failed to delete from storage: {ex.Message}");
+            }
         }
 
         private void LoadFromJson()
@@ -80,7 +99,8 @@ namespace HNG_Task2.StringServices
                     try
                     {
                         var json = File.ReadAllText(_jsonFilePath);
-                        var entities = JsonSerializer.Deserialize<List<StringEntity>>(json);
+                        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var entities = JsonSerializer.Deserialize<List<StringEntity>>(json, options);
                         if (entities != null)
                         {
                             _inMemoryStore.Clear();
@@ -92,7 +112,7 @@ namespace HNG_Task2.StringServices
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Failed to load JSON: {ex.Message}");
+                        Console.WriteLine($"⚠️ Warning: Failed to load JSON: {ex.Message}");
                     }
                 }
             }
@@ -109,13 +129,17 @@ namespace HNG_Task2.StringServices
                     {
                         Directory.CreateDirectory(directory);
                     }
-                    var options = new JsonSerializerOptions { WriteIndented = true };
+                    var options = new JsonSerializerOptions
+                    {
+                        WriteIndented = true,
+                        ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles
+                    };
                     var json = JsonSerializer.Serialize(_inMemoryStore.Values, options);
                     File.WriteAllText(_jsonFilePath, json);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to save JSON: {ex.Message}");
+                    Console.WriteLine($"⚠️ Warning: Failed to save JSON: {ex.Message}");
                 }
             }
             await Task.CompletedTask;

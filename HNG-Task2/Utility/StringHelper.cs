@@ -1,22 +1,34 @@
-﻿namespace HNG_Task2.Utility
-{
-    public class StringHelper
-    {
-        public static bool IsPalindrome(string s)
-        {
-            if (string.IsNullOrWhiteSpace(s))
-                return false;
+﻿using System.Text.RegularExpressions;
 
-            var cleaned = new string(s.ToLower().Where(char.IsLetterOrDigit).ToArray());
+namespace HNG_Task2.Utility
+{
+    public static class StringHelper
+    {
+        public static bool IsPalindrome(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var cleaned = Regex.Replace(value.ToLowerInvariant(), "[^a-z0-9]", "");
             return cleaned.SequenceEqual(cleaned.Reverse());
         }
 
-        public static int CountWords(string s)
+        public static int GetUniqueCharacterCount(string value)
         {
-            if (string.IsNullOrWhiteSpace(s))
-                return 0;
+            if (string.IsNullOrEmpty(value)) return 0;
+            return value.ToLowerInvariant().Distinct().Count(c => !char.IsWhiteSpace(c));
+        }
 
-            return s.Split((char[])null!, StringSplitOptions.RemoveEmptyEntries).Length;
+        public static int GetWordCount(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return 0;
+            return Regex.Split(value.Trim(), @"\s+").Length;
+        }
+
+        public static Dictionary<string, int> GetCharacterFrequency(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return new Dictionary<string, int>();
+            return value.ToLowerInvariant()
+                .GroupBy(c => c)
+                .ToDictionary(g => g.Key.ToString(), g => g.Count());
         }
     }
 }
