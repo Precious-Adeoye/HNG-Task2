@@ -1,0 +1,13 @@
+[
+  {
+    "Id": "473287f8298dba7163a897908958f7c0eae733e25d2e027992ea2edc9bed2fa8",
+    "Value": "string",
+    "Length": 6,
+    "IsPalindrome": false,
+    "UniqueCharacters": 6,
+    "WordCount": 1,
+    "Sha256Hash": "473287f8298dba7163a897908958f7c0eae733e25d2e027992ea2edc9bed2fa8",
+    "CharacterFrequencyJson": "{\u0022s\u0022:1,\u0022t\u0022:1,\u0022r\u0022:1,\u0022i\u0022:1,\u0022n\u0022:1,\u0022g\u0022:1}",
+    "CreatedAt": "2025-10-22T08:02:08.035508Z"
+  }
+]

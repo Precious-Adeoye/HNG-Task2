@@ -1,16 +1,13 @@
-# railway.toml
-# railway.toml
-
 [build]
 builder = "NIXPACKS"
 buildCommand = "dotnet publish -c Release -o out"
 
-[start]
-#  Use quotes and no forward slash in the key
+[deploy]
 startCommand = "dotnet out/HNG_Task2.dll"
 
 [variables]
 ASPNETCORE_ENVIRONMENT = "Production"
-ASPNETCORE_URLS = "http://+:8080"
+ASPNETCORE_URLS = "http://0.0.0.0:$PORT"
 PORT = "8080"
 
+Storage__JsonFilePath = "/tmp/strings.json"

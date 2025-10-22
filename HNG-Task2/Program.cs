@@ -1,6 +1,6 @@
-﻿
-using HNG_Task2.Data;
-using Microsoft.EntityFrameworkCore;
+﻿using HNG_Task2.IStringServices;
+using HNG_Task2.StringServices;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HNG_Task2
 {
@@ -10,60 +10,37 @@ namespace HNG_Task2
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Register storage service
+            builder.Services.AddSingleton<IStringStorage, StringStorageService>();
 
-            // Register SQLite DB
-            builder.Services.AddDbContext<AppDbContext>(options =>
-              options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
-            );
-
+            // Configure port for Railway
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
             builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
-            builder.Services.AddHealthChecks();
-
-
-            // Add services to the container.
-
+            // Add services
             builder.Services.AddControllers().AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.WriteIndented = true;
             });
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
+            builder.Services.AddHealthChecks();
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
+            // Configure pipeline
             if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
-               //  app.UseHttpsRedirection();
             }
-
-            using (var scope = app.Services.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                db.Database.EnsureCreated();
-            }
-
 
             app.UseAuthorization();
-
-
             app.MapControllers();
-            app.MapGet("/", () => "🚀 API is running on PXXL App successfully!");
+            app.MapGet("/", () => "🚀 API is running on Railway successfully!");
 
-            // Log successful startup
+            // Log startup
             Console.WriteLine($"✅ Server running on port {port} in {app.Environment.EnvironmentName} mode");
-
-            using (var scope = app.Services.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                db.Database.EnsureCreated(); // Creates DB if not existing
-            }
-
 
             try
             {
@@ -71,7 +48,7 @@ namespace HNG_Task2
             }
             catch (Exception ex)
             {
-                Console.WriteLine("❌ Application failed to start: " + ex);
+                Console.WriteLine($"❌ Application failed to start: {ex}");
                 throw;
             }
         }

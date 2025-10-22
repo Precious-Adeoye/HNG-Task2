@@ -1,9 +1,8 @@
 ﻿using System.Text.Json;
 using System.Text.RegularExpressions;
-using HNG_Task2.Data;
+using HNG_Task2.IStringServices;
 using HNG_Task2.Model;
 using HNG_Task2.Utility;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HNG_Task2.Controllers
@@ -12,46 +11,45 @@ namespace HNG_Task2.Controllers
     [ApiController]
     public class StringsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IStringStorage _storage;
 
-        public StringsController(AppDbContext context)
+        public StringsController(IStringStorage storage)
         {
-            _context = context;
+            _storage = storage;
         }
 
-        // ----------------- 1️⃣ CREATE / ANALYZE STRING ----------------
+        // POST: api/strings
         [HttpPost]
         public async Task<IActionResult> AnalyzeString([FromBody] StringRequest request)
         {
             if (string.IsNullOrWhiteSpace(request?.Value))
-                return BadRequest(new { error = "Missing 'value' field" });
+                return BadRequest(new { error = "Invalid request body or missing 'value' field" });
+
+            if (!request.Value.All(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c)))
+                return UnprocessableEntity(new { error = "Invalid data type for 'value' (must be string)" });
 
             string value = request.Value;
+            string hash = HashHelper.ComputeSha256(value);
 
-            if (_context.Strings.Any(s => s.Value == value))
-                return Conflict(new { error = "String already exist" });
+            if (await _storage.ExistsAsync(value))
+                return Conflict(new { error = "String already exists in the system" });
 
-            var hash = HashHelper.ComputeSha256(value);
-            var freq = value.GroupBy(c => c).ToDictionary(g => g.Key, g => g.Count());
-            var isPalindrome = StringHelper.IsPalindrome(value);
-            var wordCount = StringHelper.CountWords(value);
-
+            var freq = value.ToLower().GroupBy(c => c).ToDictionary(g => g.Key.ToString(), g => g.Count());
             var entity = new StringEntity
             {
                 Id = hash,
                 Value = value,
                 Sha256Hash = hash,
                 Length = value.Length,
-                IsPalindrome = isPalindrome,
-                UniqueCharacters = freq.Count,
-                WordCount = wordCount,
-                CharacterFrequencyJson = JsonSerializer.Serialize(freq),
+                IsPalindrome = StringHelper.IsPalindrome(value),
+                UniqueCharacters = value.ToLower().Distinct().Count(c => char.IsLetterOrDigit(c) || c == ' '),
+                WordCount = StringHelper.CountWords(value),
+                CharacterFrequencyJson = JsonSerializer.Serialize(freq, new JsonSerializerOptions { WriteIndented = true }),
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.Strings.Add(entity);
-            await _context.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetString), new { value = value }, new
+            await _storage.AddAsync(entity);
+            return CreatedAtAction(nameof(GetString), new { value }, new
             {
                 id = entity.Sha256Hash,
                 value = entity.Value,
@@ -64,19 +62,19 @@ namespace HNG_Task2.Controllers
                     sha256_hash = entity.Sha256Hash,
                     character_frequency_map = freq
                 },
-                created_at = entity.CreatedAt
+                created_at = entity.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
             });
         }
 
-        // ----------------- 2️⃣ GET SPECIFIC STRING -----------------
+        // GET: api/strings/{value}
         [HttpGet("{value}")]
-        public IActionResult GetString(string value)
+        public async Task<IActionResult> GetString(string value)
         {
-            var entity = _context.Strings.FirstOrDefault(s => s.Value == value);
-            if (entity == null) return NotFound(new { error = "String does not exist in the system" });
+            var entity = await _storage.GetByValueAsync(value);
+            if (entity == null)
+                return NotFound(new { error = "String does not exist in the system" });
 
-            var freq = JsonSerializer.Deserialize<Dictionary<char, int>>(entity.CharacterFrequencyJson);
-
+            var freq = JsonSerializer.Deserialize<Dictionary<string, int>>(entity.CharacterFrequencyJson);
             return Ok(new
             {
                 id = entity.Sha256Hash,
@@ -90,70 +88,61 @@ namespace HNG_Task2.Controllers
                     sha256_hash = entity.Sha256Hash,
                     character_frequency_map = freq
                 },
-                created_at = entity.CreatedAt
+                created_at = entity.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
             });
         }
 
-        // ----------------- 3️⃣ GET ALL STRINGS WITH FILTERS -----------------
+        // GET: api/strings
         [HttpGet]
-        public IActionResult GetAllStrings(
-        bool? is_palindrome,
-        int? min_length,
-        int? max_length,
-        int? word_count,
-        string? contains_character
-            )
+        public async Task<IActionResult> GetAllStrings(
+            [FromQuery] bool? is_palindrome,
+            [FromQuery] int? min_length,
+            [FromQuery] int? max_length,
+            [FromQuery] int? word_count,
+            [FromQuery] string? contains_character)
         {
-            var query = _context.Strings.AsQueryable();
-
-            if (is_palindrome.HasValue)
-                query = query.Where(s => s.IsPalindrome == is_palindrome.Value);
-            if (min_length.HasValue)
-                query = query.Where(s => s.Length >= min_length.Value);
-            if (max_length.HasValue)
-                query = query.Where(s => s.Length <= max_length.Value);
-            if (word_count.HasValue)
-                query = query.Where(s => s.WordCount == word_count.Value);
-            if (!string.IsNullOrEmpty(contains_character))
-                query = query.Where(s => s.Value.Contains(contains_character));
-
-            var results = query.ToList();
-
-            var data = results.Select(e => new
+            try
             {
-                id = e.Sha256Hash,
-                value = e.Value,
-                properties = new
+                var entities = await _storage.GetFilteredAsync(is_palindrome, min_length, max_length, word_count, contains_character);
+                var data = entities.Select(e => new
                 {
-                    length = e.Length,
-                    is_palindrome = e.IsPalindrome,
-                    unique_characters = e.UniqueCharacters,
-                    word_count = e.WordCount,
-                    sha256_hash = e.Sha256Hash,
-                    character_frequency_map = JsonSerializer.Deserialize<Dictionary<char, int>>(e.CharacterFrequencyJson)
-                },
-                created_at = e.CreatedAt
-            });
+                    id = e.Sha256Hash,
+                    value = e.Value,
+                    properties = new
+                    {
+                        length = e.Length,
+                        is_palindrome = e.IsPalindrome,
+                        unique_characters = e.UniqueCharacters,
+                        word_count = e.WordCount,
+                        sha256_hash = e.Sha256Hash,
+                        character_frequency_map = JsonSerializer.Deserialize<Dictionary<string, int>>(e.CharacterFrequencyJson)
+                    },
+                    created_at = e.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                });
 
-            return Ok(new
-            {
-                data,
-                count = data.Count(),
-                filters_applied = new
+                return Ok(new
                 {
-                    is_palindrome,
-                    min_length,
-                    max_length,
-                    word_count,
-                    contains_character
-                }
-            });
+                    data,
+                    count = data.Count(),
+                    filters_applied = new
+                    {
+                        is_palindrome,
+                        min_length,
+                        max_length,
+                        word_count,
+                        contains_character
+                    }
+                });
+            }
+            catch
+            {
+                return BadRequest(new { error = "Invalid query parameter values or types" });
+            }
         }
 
-        // ----------------- 4️⃣ NATURAL LANGUAGE FILTER -----------------
-
+        // GET: api/strings/filter-by-natural-language
         [HttpGet("filter-by-natural-language")]
-        public IActionResult FilterByNaturalLanguage(string query)
+        public async Task<IActionResult> FilterByNaturalLanguage(string query)
         {
             if (string.IsNullOrWhiteSpace(query))
                 return BadRequest(new { error = "Query cannot be empty" });
@@ -164,71 +153,83 @@ namespace HNG_Task2.Controllers
             int? minLength = null;
             string? containsChar = null;
 
-            if (query.Contains("palindromic")) isPalindrome = true;
-            if (query.Contains("single word")) wordCount = 1;
-
-            var matchLength = Regex.Match(query, @"longer than (\d+)");
-            if (matchLength.Success) minLength = int.Parse(matchLength.Groups[1].Value);
-
-            var matchChar = Regex.Match(query, @"letter (\w)");
-            if (matchChar.Success) containsChar = matchChar.Groups[1].Value;
-
-            var result = _context.Strings.AsQueryable();
-            if (isPalindrome.HasValue)
-                result = result.Where(s => s.IsPalindrome == isPalindrome.Value);
-            if (wordCount.HasValue)
-                result = result.Where(s => s.WordCount == wordCount.Value);
-            if (minLength.HasValue)
-                result = result.Where(s => s.Length > minLength.Value);
-            if (!string.IsNullOrEmpty(containsChar))
-                result = result.Where(s => s.Value.Contains(containsChar));
-
-            var data = result.ToList().Select(s => new
+            try
             {
-                id = s.Sha256Hash,
-                value = s.Value,
-                properties = new
+                if (query.Contains("single word") && query.Contains("palindromic"))
                 {
-                    length = s.Length,
-                    is_palindrome = s.IsPalindrome,
-                    unique_characters = s.UniqueCharacters,
-                    word_count = s.WordCount,
-                    sha256_hash = s.Sha256Hash,
-                    character_frequency_map = JsonSerializer.Deserialize<Dictionary<char, int>>(s.CharacterFrequencyJson)
-                },
-                created_at = s.CreatedAt
-            });
-
-            return Ok(new
-            {
-                data,
-                count = data.Count(),
-                interpreted_query = new
-                {
-                    original = query,
-                    parsed_filters = new
-                    {
-                        word_count = wordCount,
-                        is_palindrome = isPalindrome,
-                        min_length = minLength,
-                        contains_character = containsChar
-                    }
+                    wordCount = 1;
+                    isPalindrome = true;
                 }
-            });
+                else if (query.Contains("palindromic") && query.Contains("first vowel"))
+                {
+                    isPalindrome = true;
+                    containsChar = "a";
+                }
+                else
+                {
+                    if (query.Contains("palindromic")) isPalindrome = true;
+                    if (query.Contains("single word")) wordCount = 1;
+
+                    var matchLength = Regex.Match(query, @"longer than (\d+)");
+                    if (matchLength.Success) minLength = int.Parse(matchLength.Groups[1].Value) + 1;
+
+                    var matchChar = Regex.Match(query, @"letter (\w)");
+                    if (matchChar.Success) containsChar = matchChar.Groups[1].Value;
+                }
+
+                if (isPalindrome == null && wordCount == null && minLength == null && containsChar == null)
+                    return BadRequest(new { error = "Unable to parse natural language query" });
+
+                var entities = await _storage.GetFilteredAsync(isPalindrome, minLength, null, wordCount, containsChar);
+                var data = entities.Select(s => new
+                {
+                    id = s.Sha256Hash,
+                    value = s.Value,
+                    properties = new
+                    {
+                        length = s.Length,
+                        is_palindrome = s.IsPalindrome,
+                        unique_characters = s.UniqueCharacters,
+                        word_count = s.WordCount,
+                        sha256_hash = s.Sha256Hash,
+                        character_frequency_map = JsonSerializer.Deserialize<Dictionary<string, int>>(s.CharacterFrequencyJson)
+                    },
+                    created_at = s.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                });
+
+                return Ok(new
+                {
+                    data,
+                    count = data.Count(),
+                    interpreted_query = new
+                    {
+                        original = query,
+                        parsed_filters = new
+                        {
+                            word_count = wordCount,
+                            is_palindrome = isPalindrome,
+                            min_length = minLength,
+                            contains_character = containsChar
+                        }
+                    }
+                });
+            }
+            catch
+            {
+                return UnprocessableEntity(new { error = "Query parsed but resulted in conflicting filters" });
+            }
         }
 
-        // ----------------- 5️⃣ DELETE STRING -----------------
+        // DELETE: api/strings/{value}
         [HttpDelete("{value}")]
         public async Task<IActionResult> DeleteString(string value)
         {
-            var entity = _context.Strings.FirstOrDefault(s => s.Value == value);
+            var entity = await _storage.GetByValueAsync(value);
             if (entity == null)
                 return NotFound(new { error = "String does not exist in the system" });
 
-            _context.Strings.Remove(entity);
-            await _context.SaveChangesAsync();
+            await _storage.DeleteAsync(value);
             return NoContent();
         }
-
     }
 }
