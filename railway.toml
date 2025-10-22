@@ -9,5 +9,4 @@ startCommand = "dotnet out/HNG_Task2.dll"
 ASPNETCORE_ENVIRONMENT = "Production"
 ASPNETCORE_URLS = "http://0.0.0.0:$PORT"
 PORT = "8080"
-
 Storage__JsonFilePath = "/tmp/strings.json"
